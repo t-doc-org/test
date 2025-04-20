@@ -1,0 +1,9 @@
+syntax: glob
+*.orig
+__pycache__
+
+syntax: regexp
+^_build/
+^_venv/
+^docs/_build/
+^tmp/

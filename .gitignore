@@ -1,0 +1,7 @@
+*.orig
+__pycache__
+
+/_build/
+/_venv/
+/docs/_build/
+/tmp/
