@@ -8,7 +8,6 @@ copyright = "%Y Remy Blank"
 license = 'CC-BY-NC-SA-4.0'
 language = 'en'
 
-keep_warnings = True
 myst_links_external_new_tab = True
 
 html_theme_options = {
