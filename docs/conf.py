@@ -13,3 +13,7 @@ myst_links_external_new_tab = True
 html_theme_options = {
     'repository_url': 'https://github.com/t-doc-org/test',
 }
+
+tdoc_domain_storage = {
+    'origin': 'https://common.t-doc.org',
+}
