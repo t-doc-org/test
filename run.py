@@ -272,6 +272,6 @@ if __name__ == '__main__':
         sys.exit(1)
     except BaseException as e:
         if '--debug' in sys.argv: raise
-        sys.stderr.write(f'\n{e}\n')
+        sys.stderr.write(f'\nERROR: {e}\n')
         maybe_wait_on_exit(sys.stderr)
         sys.exit(1)
