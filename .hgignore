@@ -3,7 +3,6 @@ syntax: glob
 __pycache__
 
 syntax: regexp
-^_build/
-^_venv/
+^_[^/]*/
 ^docs/_build/
 ^tmp/

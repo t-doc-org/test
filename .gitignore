@@ -1,7 +1,6 @@
 *.orig
 __pycache__
 
-/_build/
-/_venv/
+/_*/
 /docs/_build/
 /tmp/
