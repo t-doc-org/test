@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT
 
 import contextvars
+import functools
 import json
 import os
 import pathlib
@@ -25,8 +26,23 @@ default_command = ['tdoc', 'serve', '--open']
 def main(argv, stdin, stdout, stderr):
     base = pathlib.Path(argv[0]).parent.resolve()
 
-    # Find a matching venv, or create one if there is none.
+    # Parse command-line options.
     version = os.environ.get('TDOC_VERSION', VERSION)
+    i = 1
+    while True:
+        if i >= len(argv) or not (arg := argv[i]).startswith('--'):
+            argv = argv[:1] + argv[i:]
+            break
+        elif arg == '--':
+            argv = argv[:1] + argv[i + 1:]
+            break
+        elif arg.startswith('--version='):
+            version = arg[10:]
+        else:
+            raise Exception(f"Unknown option: {arg}")
+        i += 1
+
+    # Find a matching venv, or create one if there is none.
     builder = EnvBuilder(base, version, stderr, '--debug' in argv)
     envs, matching = builder.find()
     if not matching:
@@ -52,8 +68,11 @@ Release notes: <https://common.t-doc.org/release-notes.html\
         if VERSION:
             stderr.write("Unset VERSION in run.py and restart the program to "
                          "upgrade.\n\n")
-        elif version:
+        elif os.environ.get('TDOC_VERSION'):
             stderr.write("Unset TDOC_VERSION and restart the program to "
+                         "upgrade.\n\n")
+        elif version:
+            stderr.write("Restart the program without the --version= option to "
                          "upgrade.\n\n")
         else:
             stderr.write("Would you like to install the upgrade (y/n)? ")
@@ -80,17 +99,6 @@ Release notes: <https://common.t-doc.org/release-notes.html\
     return subprocess.run(args).returncode
 
 
-class lazy:
-    def __init__(self, fn):
-        self.fn = fn
-
-    def __get__(self, instance, owner=None):
-        if instance is None: return self
-        res = self.fn(instance)
-        setattr(instance, self.fn.__name__, res)
-        return res
-
-
 class Namespace(dict):
     def __getattr__(self, name):
         return self[name]
@@ -105,14 +113,14 @@ class Env:
     def __init__(self, path, builder):
         self.path, self.builder = path, builder
 
-    @lazy
+    @functools.cached_property
     def requirements(self):
         try:
             return (self.path / self.requirements_txt).read_text()
         except OSError:
             return None
 
-    @lazy
+    @functools.cached_property
     def sysinfo(self):
         vars = {'base': self.path, 'platbase': self.path,
                 'installed_base': self.path, 'intsalled_platbase': self.path}
@@ -153,7 +161,7 @@ class Env:
         if not json_output: return p.stdout
         return json.loads(p.stdout, object_pairs_hook=Namespace)
 
-    @lazy
+    @functools.cached_property
     def upgrade(self):
         try:
             upgrade = (self.path / self.upgrade_txt).read_text('utf-8')
