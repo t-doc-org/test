@@ -218,8 +218,8 @@ class Env:
             self.builder.out.write(f"ERROR: {e}")
 
     def uv(self, *args, **kwargs):
-        p = subprocess.run(('uv',) + args, stdin=subprocess.DEVNULL, text=True,
-                           **kwargs)
+        p = subprocess.run((self.bin_path('uv'),) + args,
+                           stdin=subprocess.DEVNULL, text=True, **kwargs)
         if p.returncode != 0: raise Exception(p.stderr)
         return p.stdout
 
@@ -284,6 +284,7 @@ class EnvBuilder(venv.EnvBuilder):
         else:
             data = pathlib.Path(self.config_url).read_bytes()
         config = tomllib.loads(data.decode('utf-8'))
+        self.root.mkdir(exist_ok=True)
         with write_atomic(self.root / self.config_toml, 'wb') as f:
             f.write(data)
         self.merge_local_config(config)
@@ -324,11 +325,16 @@ class EnvBuilder(venv.EnvBuilder):
         env, requirements = Env.env.get()
         pip_args = []
         if self.version == 'dev':
-            rdpath = env.path / env.requirements_deps_txt
-            env.uv('export', '--no-emit-project', '--format=requirements-txt',
-                   f'--output-file={rdpath}', capture_output=True)
+            uv_req = self.base / 'config' / 'uv.req'
             env.pip('install', '--require-hashes', '--only-binary=:all:',
-                    '--no-deps', '--requirement', rdpath,
+                    '--no-deps', f'--requirement={uv_req}',
+                    check=True, stdout=self.out, stderr=self.out)
+            rdpath = env.path / env.requirements_deps_txt
+            env.uv('export', '--frozen', '--no-emit-project',
+                   '--format=requirements-txt', f'--output-file={rdpath}',
+                   cwd=self.base, capture_output=True)
+            env.pip('install', '--require-hashes', '--only-binary=:all:',
+                    '--no-deps', f'--requirement={rdpath}',
                     check=True, stdout=self.out, stderr=self.out)
             pip_args.append('--no-deps')
 
