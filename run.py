@@ -105,7 +105,7 @@ Release notes: <https://common.t-doc.org/release-notes.html\
 
     # Check for upgrades.
     wait_until = None
-    if builder.version != 'dev':
+    if not (is_dev(builder.version) or is_wheel(builder.version)):
         checker = threading.Thread(target=env.check_upgrade, daemon=True)
         checker.start()
         wait_until = time.monotonic() + 5
@@ -114,7 +114,7 @@ Release notes: <https://common.t-doc.org/release-notes.html\
     try:
         args = argv[1:] if len(argv) > 1 \
                else builder.config['defaults']['command-dev'] \
-               if builder.version == 'dev' \
+               if is_dev(builder.version) \
                else builder.config['defaults']['command']
         args[0] = env.bin_path(args[0])
         rc = subprocess.run(args).returncode
@@ -147,6 +147,8 @@ tag_re = re.compile(r'[a-z][a-z0-9-]*')
 
 def is_version(version): return version_re.match(version)
 def is_tag(version): return tag_re.match(version)
+def is_dev(version): return version == 'dev'
+def is_wheel(version): return pathlib.Path(version).resolve().is_file()
 
 
 @contextlib.contextmanager
@@ -259,7 +261,7 @@ class EnvBuilder(venv.EnvBuilder):
         self.config_url = config
         self.out, self.debug = out, debug
         if version is None: version = self.config['version']
-        if not (is_version(version) or is_tag(version)):
+        if not (is_version(version) or is_tag(version) or is_wheel(version)):
             raise Exception(f"Invalid version: {version}")
         self.version = version
 
@@ -296,7 +298,8 @@ class EnvBuilder(venv.EnvBuilder):
             merge_dict(config, tomllib.load(f))
 
     def requirements(self, config=None):
-        if (v := self.version) == 'dev': return f'-e {self.base.as_uri()}\n'
+        if is_dev(v := self.version): return f'-e {self.base.as_uri()}\n'
+        if is_wheel(v): return f'{pathlib.Path(v).resolve().as_uri()}\n'
         if config is None: config = self.config
         version_num = config.get('tags', {}).get(v) if is_tag(v) else v
         if version_num is None:
@@ -309,14 +312,16 @@ class EnvBuilder(venv.EnvBuilder):
         if (m := pat.search(requirements)) is not None: return m.group(1)
 
     def find(self):
-        pat = 'dev' if self.version == 'dev' else f'{self.version}-*'
+        pat = 'dev' if is_dev(self.version) \
+              else 'wheel' if is_wheel(self.version) else f'{self.version}-*'
         envs = [Env(path, self) for path in self.root.glob(pat)]
         envs.sort(key=lambda e: e.path, reverse=True)
         matching = [e for e in envs if e.requirements is not None]
         return envs, matching
 
     def new(self):
-        name = 'dev' if self.version == 'dev' \
+        name = 'dev' if is_dev(self.version) \
+               else 'wheel' if is_wheel(self.version) \
                else f'{self.version}-{time.time_ns():024x}'
         return Env(self.root / name, self)
 
@@ -324,7 +329,7 @@ class EnvBuilder(venv.EnvBuilder):
         super().post_setup(ctx)
         env, requirements = Env.env.get()
         pip_args = []
-        if self.version == 'dev':
+        if is_dev(self.version):
             uv_req = self.base / 'config' / 'uv.req'
             env.pip('install', '--require-hashes', '--only-binary=:all:',
                     '--no-deps', f'--requirement={uv_req}',
