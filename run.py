@@ -31,6 +31,7 @@ def main(argv, stdin, stdout, stderr):
     # Parse command-line options.
     config = os.environ.get('TDOC_CONFIG', CONFIG)
     debug = False
+    print_key = None
     version = os.environ.get('TDOC_VERSION')
     i = 1
     while True:
@@ -44,15 +45,27 @@ def main(argv, stdin, stdout, stderr):
             config = arg[9:]
         elif arg == '--debug':
             debug = True
+        elif arg.startswith('--print='):
+            print_key = arg[8:]
         elif arg.startswith('--version='):
             version = arg[10:]
         else:
             raise Exception(f"Unknown option: {arg}")
         i += 1
 
-    # Find a matching venv, or create one if there is none.
+    # Create a environment builder.
     builder = EnvBuilder(base, config, version, stderr,
                          debug or '--debug' in argv)
+    if print_key is not None:
+        v = builder.config
+        try:
+            for k in print_key.split('.'): v = v[k]
+        except KeyError:
+            return 1
+        stdout.write(str(v))
+        return 0
+
+    # Find a matching venv, or create one if there is none.
     envs, matching = builder.find()
     if not matching:
         stderr.write("Installing...\n")
