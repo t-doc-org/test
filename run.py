@@ -20,9 +20,8 @@ import tomllib
 from urllib import request
 import venv
 
-# The URL of the default config.
-CONFIG = 'https://github.com/t-doc-org/common' \
-         '/raw/refs/heads/main/config/t-doc.toml'
+# The URL of the config directory.
+CONFIG = 'https://github.com/t-doc-org/common/raw/refs/heads/main/config'
 
 
 def main(argv, stdin, stdout, stderr):
@@ -31,6 +30,7 @@ def main(argv, stdin, stdout, stderr):
     # Parse command-line options.
     config = os.environ.get('TDOC_CONFIG', CONFIG)
     debug = False
+    hermetic = None
     print_key = None
     version = os.environ.get('TDOC_VERSION')
     i = 1
@@ -45,6 +45,10 @@ def main(argv, stdin, stdout, stderr):
             config = arg[9:]
         elif arg == '--debug':
             debug = True
+        elif arg == '--hermetic':
+            hermetic = True
+        elif arg == '--no-hermetic':
+            hermetic = False
         elif arg.startswith('--print='):
             print_key = arg[8:]
         elif arg.startswith('--version='):
@@ -54,7 +58,7 @@ def main(argv, stdin, stdout, stderr):
         i += 1
 
     # Create a environment builder.
-    builder = EnvBuilder(base, config, version, stderr,
+    builder = EnvBuilder(base, config, version, hermetic, stderr,
                          debug or '--debug' in argv)
     if print_key is not None:
         v = builder.config
@@ -79,7 +83,7 @@ def main(argv, stdin, stdout, stderr):
     for e in envs:
         if e is not env: e.remove()
 
-    # Check for upgrades, and upgrade if requested.
+    # Check for available upgrades, and upgrade if requested.
     reqs, reqs_up = env.requirements, env.requirements_upgrade
     if reqs_up is not None and reqs_up != reqs:
         cur, new = builder.version_from(reqs), builder.version_from(reqs_up)
@@ -109,20 +113,17 @@ Release notes: <https://common.t-doc.org/release-notes.html\
         checker = threading.Thread(target=env.check_upgrade, daemon=True)
         checker.start()
         wait_until = time.monotonic() + 5
-
-    # Run the command.
     try:
+        # Run the command.
         args = argv[1:] if len(argv) > 1 \
                else builder.config['defaults']['command-dev'] \
                if is_dev(builder.version) \
                else builder.config['defaults']['command']
         args[0] = env.bin_path(args[0])
         rc = subprocess.run(args).returncode
-    except (Exception, KeyboardInterrupt):
-        rc = 1
-
-    # Give the upgrade checker a chance to run at least for a bit.
-    if wait_until is not None: checker.join(wait_until - time.monotonic())
+    finally:
+        # Give the upgrade checker a chance to run at least for a bit.
+        if wait_until is not None: checker.join(wait_until - time.monotonic())
     return rc
 
 
@@ -254,7 +255,7 @@ class EnvBuilder(venv.EnvBuilder):
     venv_root = '_venv'
     config_toml = 't-doc.toml'
 
-    def __init__(self, base, config, version, out, debug):
+    def __init__(self, base, config, version, hermetic, out, debug):
         super().__init__(with_pip=True)
         self.base = base
         self.root = base / self.venv_root
@@ -263,7 +264,7 @@ class EnvBuilder(venv.EnvBuilder):
         if version is None: version = self.config['version']
         if not (is_version(version) or is_tag(version) or is_wheel(version)):
             raise Exception(f"Invalid version: {version}")
-        self.version = version
+        self.version, self.hermetic = version, hermetic
 
     @functools.cached_property
     def package(self):
@@ -280,17 +281,19 @@ class EnvBuilder(venv.EnvBuilder):
         return config
 
     def fetch_config(self):
-        if self.config_url.startswith('https://'):
-            with request.urlopen(self.config_url, timeout=30) as f:
-                data = f.read()
-        else:
-            data = pathlib.Path(self.config_url).read_bytes()
+        data = self.fetch(self.config_toml)
         config = tomllib.loads(data.decode('utf-8'))
         self.root.mkdir(exist_ok=True)
         with write_atomic(self.root / self.config_toml, 'wb') as f:
             f.write(data)
         self.merge_local_config(config)
         return config
+
+    def fetch(self, name):
+        if self.config_url.startswith('https://'):
+            with request.urlopen(f'{self.config_url}/{name}', timeout=30) as f:
+                return f.read()
+        return (pathlib.Path(self.config_url) / name).read_bytes()
 
     def merge_local_config(self, config):
         with contextlib.suppress(OSError), \
@@ -305,10 +308,13 @@ class EnvBuilder(venv.EnvBuilder):
         if version_num is None:
             raise Exception(f"Unknown version tag: {v}\nAvailable tags: "
                             f"{' '.join(sorted(config['tags'].keys()))}")
-        return f'{config['package']}=={version_num}\n'
+        hermetic = self.hermetic if self.hermetic is not None \
+                   else config.get('hermetic', True)
+        if not hermetic: return f'{config['package']}=={version_num}\n'
+        return self.fetch(f'{version_num}.req').decode('utf-8')
 
     def version_from(self, requirements):
-        pat = re.compile(f'^{re.escape(self.package)}==([^\\s;]+)$')
+        pat = re.compile(f'^{re.escape(self.package)}==([^\\s;]+)(?:\\s|$)')
         if (m := pat.search(requirements)) is not None: return m.group(1)
 
     def find(self):
@@ -336,7 +342,7 @@ class EnvBuilder(venv.EnvBuilder):
                     check=True, stdout=self.out, stderr=self.out)
             rdpath = env.path / env.requirements_deps_txt
             env.uv('export', '--frozen', '--no-emit-project',
-                   '--format=requirements-txt', f'--output-file={rdpath}',
+                   '--format=requirements.txt', f'--output-file={rdpath}',
                    cwd=self.base, capture_output=True)
             env.pip('install', '--require-hashes', '--only-binary=:all:',
                     '--no-deps', f'--requirement={rdpath}',
@@ -344,10 +350,10 @@ class EnvBuilder(venv.EnvBuilder):
             pip_args.append('--no-deps')
 
         if requirements is None: requirements = self.requirements()
-        with write_atomic(env.path / env.requirements_txt) as f:
-            rpath = pathlib.Path(f.name)
-            rpath.write_text(requirements)
-            env.pip('install', '--only-binary=:all:', f'--requirement={rpath}',
+        with write_atomic(env.path / env.requirements_txt, 'w') as f:
+            f.write(requirements)
+            f.flush()
+            env.pip('install', '--only-binary=:all:', f'--requirement={f.name}',
                     *pip_args, check=True, stdout=self.out, stderr=self.out)
 
 
