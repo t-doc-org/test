@@ -314,7 +314,7 @@ class EnvBuilder(venv.EnvBuilder):
         return self.fetch(f'{version_num}.req').decode('utf-8')
 
     def version_from(self, requirements):
-        pat = re.compile(f'^{re.escape(self.package)}==([^\\s;]+)(?:\\s|$)')
+        pat = re.compile(f'(?m)^{re.escape(self.package)}==([^\\s;]+)(?:\\s|$)')
         if (m := pat.search(requirements)) is not None: return m.group(1)
 
     def find(self):
