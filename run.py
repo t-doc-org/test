@@ -46,7 +46,8 @@ class Stage2:
 
     def run(self, stdin, stdout, stderr):
         mod = self.get()
-        return mod['main'](self.base, self.argv, stdin, stdout, stderr)
+        return mod['main'](argv=self.argv, stdin=stdin, stdout=stdout,
+                           stderr=stderr, base=self.base)
 
     def get(self):
         with contextlib.suppress(Exception):
