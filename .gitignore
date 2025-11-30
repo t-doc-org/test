@@ -1,6 +1,7 @@
 *.orig
 __pycache__
 
+/local.toml
 /_*/
 /docs/_build/
 /tmp/

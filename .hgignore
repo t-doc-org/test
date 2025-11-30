@@ -3,6 +3,7 @@ syntax: glob
 __pycache__
 
 syntax: regexp
+^local\.toml$
 ^_[^/]*/
 ^docs/_build/
 ^tmp/
