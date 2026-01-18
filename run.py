@@ -13,6 +13,13 @@ from urllib import request
 # The URL of the "common" repository.
 REPO = 'https://github.com/t-doc-org/common'
 
+# Use certifi if it's available.
+ssl_ctx = None
+with contextlib.suppress(ImportError):
+    import ssl
+    import certifi
+    ssl_ctx = ssl.create_default_context(cafile=certifi.where())
+
 
 def main(argv, stdin, stdout, stderr):
     try:
@@ -68,7 +75,7 @@ class Stage2:
             return (self.base / 'config' / self.run_stage2).read_bytes()
         with request.urlopen(
                 f'{REPO}/raw/refs/heads/main/config/{self.run_stage2}',
-                timeout=30) as f:
+                context=ssl_ctx, timeout=30) as f:
             return f.read()
 
     def exec(self, data):
