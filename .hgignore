@@ -4,6 +4,7 @@ __pycache__
 
 syntax: regexp
 ^local\.toml$
+^run\.local\.toml$
 ^_[^/]*/
 ^docs/_build/
 ^tmp/

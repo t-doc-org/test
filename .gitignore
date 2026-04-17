@@ -2,6 +2,7 @@
 __pycache__
 
 /local.toml
+/run.local.toml
 /_*/
 /docs/_build/
 /tmp/
