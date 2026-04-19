@@ -1,8 +1,7 @@
+*.local.*
 *.orig
 __pycache__
 
-/local.toml
-/run.local.toml
 /_*/
 /docs/_build/
 /tmp/
