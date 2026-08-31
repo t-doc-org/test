@@ -1,7 +1,17 @@
+# BEGIN-COMMON
+# The lines between BEGIN-COMMON and END-COMMON are updated automatically.
+# Do not edit manually; add site-specific patterns below.
+*~
+*.autosave.xopp
 *.local.*
 *.orig
+*.swp
+.DS_Store
 __pycache__
 
 /_*/
 /docs/_build/
 /tmp/
+# END-COMMON
+
+# Site-specific patterns.

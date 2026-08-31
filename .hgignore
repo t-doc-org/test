@@ -1,9 +1,19 @@
+# BEGIN-COMMON
+# The lines between BEGIN-COMMON and END-COMMON are updated automatically.
+# Do not edit manually; add site-specific patterns below.
 syntax: glob
+*~
+*.autosave.xopp
 *.local.*
 *.orig
+*.swp
+.DS_Store
 __pycache__
 
-syntax: regexp
-^_[^/]*/
-^docs/_build/
-^tmp/
+syntax: rootglob
+_*/
+docs/_build/
+tmp/
+# END-COMMON
+
+# Site-specific patterns.
